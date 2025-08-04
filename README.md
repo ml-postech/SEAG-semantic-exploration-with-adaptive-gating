@@ -20,18 +20,16 @@ llama_3_ckpts: (Required) Path to the LLaMA 3 checkpoint
 
 Our implementation is based on the following repositories:
 
-- [llm-reasoners](https://github.com/maitrix-org/llm-reasoners)  
-  (Reasoning via Planning with MCTS — Hao et al., 2023)
-
-- [semantic_uncertainty](https://github.com/lorenzkuhn/semantic_uncertainty)  
-  (Semantic Uncertainty for Hallucination Detection in LLMs —  
+- [Reasoning via Planning with MCTS](https://arxiv.org/pdf/2305.14992), code: [llm-reasoners](https://github.com/maitrix-org/llm-reasoners)
+- [SEMANTIC UNCERTAINTY: LINGUISTIC INVARIANCES FOR UNCERTAINTY ESTIMATION IN NATURAL LANGUAGE GENERATION](https://arxiv.org/pdf/2302.09664) code: [semantic-uncertainty](https://github.com/lorenzkuhn/semantic_uncertainty)  
    originally presented at ICLR 2023, with a new implementation in their 2024 Nature paper:  
    *"Detecting Hallucinations in Large Language Models Using Semantic Entropy"*)
 
-📬 Contact
+## 📬 Contact
 If you have any questions, feel free to contact:
-📧 Hyejin Park: parkebbi2@postech.ac.kr
-📧 Sungjae Lee: sungjaelee25@postech.ac.kr
+
+- 📧 Hyejin Park: parkebbi2@postech.ac.kr
+- 📧 Sungjae Lee: sungjaelee25@postech.ac.kr
 
 # Citation
 @article{lee2025semantic,
