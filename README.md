@@ -14,8 +14,7 @@ expample_gsm8k/inference.py \
 --log_dir ./logs/gsm8k/
 ```
 
-- Arguments
-llama_3_ckpts: (Required) Path to the LLaMA 3 checkpoint
+- llama_3_ckpts: (Required) Path to the LLaMA 3 checkpoint
 
 
 ## Acknowledgements
