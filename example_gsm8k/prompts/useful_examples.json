@@ -1,0 +1,7 @@
+{
+  "input": "Given a question and some sub-questions, determine whether the last sub-question is useful to answer the question. Output 'Yes' or 'No', and a reason.\n\nQuestion 1: Four years ago, Kody was only half as old as Mohamed. If Mohamed is currently twice as 30 years old, how old is Kody?\nQuestion 1.1: How old is Mohamed?\nQuestion 1.2: How old was Mohamed four years ago?\nNew question 1.3: How old was Kody four years ago?\nIs the new question useful? Yes. We need the answer to calculate how old is Kody now.\n\n",
+  "question_prefix": "Question 2: ",
+  "subquestion_prefix": "Question 2.{}:",
+  "new_subquestion_prefix": "New question 2.{}:",
+  "useful_prefix": "Is the new question useful?"
+}

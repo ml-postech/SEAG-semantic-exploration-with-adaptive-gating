@@ -1,0 +1,13 @@
+{
+  "instruction": "Given a question, please decompose it into sub-questions. For each sub-question, please answer it in a complete sentence, ending with \"The answer is\". When the original question is answerable, please start the subquestion with \"Now we can answer the question: \".",
+  "interactive_examples": [
+    "Question {idx}: Albert is wondering how much pizza he can eat in one day. He buys 2 large pizzas and 2 small pizzas. A large pizza has 16 slices and a small pizza has 8 slices. If he eats it all, how many pieces does he eat that day?\nQuestion {idx}.1: How many slices are in one large pizza?\nAnswer {idx}.1: One large pizza has 16 slices. The answer is 16.\nQuestion {idx}.2: How many slices are there in total from the large pizzas?\nAnswer {idx}.2: He buys 2 large pizzas, so 2 * 16 = 32 slices. The answer is 32.\nQuestion {idx}.3: How many slices are in one small pizza?\nAnswer {idx}.3: One small pizza has 8 slices. The answer is 8.\nQuestion {idx}.4: How many slices are there in total from the small pizzas?\nAnswer {idx}.4: He buys 2 small pizzas, so 2 * 8 = 16 slices. The answer is 16.\nQuestion {idx}.5: Now we can answer the question: How many pieces does he eat that day?\nAnswer {idx}.5: There are 32 slices from the large pizzas and 16 slices from the small pizzas, so he eats 32 + 16 = 48 pieces that day. The answer is 48."
+  ],
+  "useful_examples": [
+    ""
+  ],
+  "question_prefix": "Question {idx}: {question}",
+  "subquestion_prefix": "Question {idx}.{sub_idx}:",
+  "overall_question_prefix": "Now we can answer the question:",
+  "answer_prefix": "Answer {idx}.{sub_idx}:"
+}

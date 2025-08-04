@@ -1,0 +1,7 @@
+{
+    "cot_pool":
+    [
+    "Q: Albert is wondering how much pizza he can eat in one day. He buys 2 large pizzas and 2 small pizzas. A large pizza has 16 slices and a small pizza has 8 slices. If he eats it all, how many pieces does he eat that day?\nA: He buys 2 large pizzas, so he has 2 * 16 = 32 slices. He buys 2 small pizzas, so he has 2 * 8 = 16 slices. There are 32 slices from the large pizzas and 16 slices from the small pizzas, so he eats 32 + 16 = 48 pieces that day. The answer is 48.\n\n"
+    ],
+    "prefix": "Q: {QUESTION}\nA:"
+}
