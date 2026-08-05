@@ -8,6 +8,7 @@ from datetime import datetime
 from reasoners.benchmark import GSM8KEvaluator
 
 from reasoners import LanguageModel, Reasoner, SearchAlgorithm
+from reasoners.base import GenerateOutput
 from reasoners.algorithm import MCTS_SE, MCTSNode_SE, MCTSAggregation_SE
 
 from world_model import GSM8kWorldModel, GSM8kPromptDict
@@ -30,8 +31,27 @@ import torch
 from tqdm import tqdm
 import pickle
 import copy
+import traceback
 
 from collections import defaultdict
+
+
+def extract_generated_texts(generated) -> list:
+    """Normalize the return value of ``LanguageModel.generate`` into ``list[str]``.
+
+    The model classes are inconsistent about what they return: ``HFModel`` and
+    ``OpenAIModel`` return a bare ``GenerateOutput``, while ``Llama3Model``
+    returns the 3-tuple ``(GenerateOutput, input_tokens_count,
+    output_tokens_count)``. Indexing the result with ``[0]`` and then reading
+    ``.text`` therefore only works for the latter; on the former it yields the
+    ``text`` field itself (a list) and raises ``AttributeError``.
+    """
+    if isinstance(generated, GenerateOutput):
+        return list(generated.text)
+    if isinstance(generated, tuple) and generated and isinstance(generated[0], GenerateOutput):
+        return list(generated[0].text)
+    raise TypeError(f'unexpected return type from generate(): {type(generated)!r}')
+
 
 class CoTReasoner():
     def __init__(self, base_model, n_sc=1, temperature=0, bs=1):
@@ -62,7 +82,12 @@ class CoTReasoner():
         elif isinstance(self.base_model, Llama2Model):
             eos_token_id = [13]
         elif isinstance(self.base_model, Llama3Model):
-            eos_token_id = ["\n\n", ".\n", "\n", ".\n\n", "\nQ"]
+            # NOTE: "\n" and ".\n" must not be stop tokens here. A CoT trace
+            # contains single line breaks between reasoning steps, so stopping
+            # on them truncates generation at the first step and the trace never
+            # reaches the concluding "The answer is ..." line, which makes
+            # utils.cot_sc_extractor return None for otherwise-solvable problems.
+            eos_token_id = ["\n\n", ".\n\n", "\nQ"]
         elif self.base_model.model.config.architectures[0] == 'InternLM2ForCausalLM':
             eos_token_id = [364, 402, 512, 756]
         elif self.base_model.model.config.architectures[0] == 'Qwen2ForCausalLM':
@@ -77,11 +102,12 @@ class CoTReasoner():
         for i in range((self.n_sc - 1) // self.bs + 1):
             local_bs = min(self.bs, self.n_sc - i * self.bs)
             
-            outputs += self.base_model.generate([inputs] * local_bs,
+            generated = self.base_model.generate([inputs] * local_bs,
                                             hide_input=True,
                                             do_sample=do_sample,
                                             temperature=self.temperature,
-                                            eos_token_id=eos_token_id)[0].text
+                                            eos_token_id=eos_token_id)
+            outputs += extract_generated_texts(generated)
             num_inf_for_answer += local_bs
             
         outputs= [o.strip() if o.strip().endswith(".") else o.strip() + "." for o in outputs]
@@ -115,6 +141,7 @@ def rap_gsm8k(base_model: LanguageModel,
             disable_tqdm: bool = False,
             output_trace_in_each_iter: bool = True,
             early_term_threshold: float = np.inf,
+            seed: int = 12306,
             aggregate: bool = True,
             adaptive_gating: bool = True,
             entropy_thres: float = 1.5,
@@ -211,17 +238,24 @@ def rap_gsm8k(base_model: LanguageModel,
             else:
                 try:
                     reasoner = Reasoner(world_model=world_model, search_config=config, search_algo=search_algo)
-                    seed_num = 12306
+                    # Re-seeding with a constant here would put every example --
+                    # and every run -- into an identical starting state, which
+                    # removes the sampling diversity MCTS/SE depend on. Offset by
+                    # the example index so a run is still reproducible given
+                    # --seed, without collapsing all examples onto one draw.
+                    seed_num = seed + resume + i
                     random.seed(seed_num)
                     np.random.seed(seed_num)
                     torch.manual_seed(seed_num)
                     torch.cuda.manual_seed(seed_num)
                     torch.backends.cudnn.deterministic = True
-                    algo_output, num_inf_for_get_actions_2, num_inf_for_answer_2, num_inf_for_fast_reward_2 = reasoner(input_processor(example),
+                    # MCTS_SE.__call__ returns (result, llm_usage_stats), where
+                    # llm_usage_stats is a dict -- not four positional values.
+                    algo_output, llm_usage_stats = reasoner(input_processor(example),
                                                 prompt=ret)
-                    num_inf_for_get_actions += num_inf_for_get_actions_2
-                    num_inf_for_answer += num_inf_for_answer_2
-                    num_inf_for_fast_reward += num_inf_for_fast_reward_2
+                    num_inf_for_get_actions += llm_usage_stats['num_inf_for_get_actions']
+                    num_inf_for_answer += llm_usage_stats['num_inf_for_answer']
+                    num_inf_for_fast_reward += llm_usage_stats['num_inf_for_fast_reward']
                     total_num_inf = num_inf_for_get_actions + num_inf_for_answer + num_inf_for_fast_reward
                     output = utils.retrieve_answer(algo_output)
                     answer = utils.retrieve_answer_from_dataset(example)
@@ -242,7 +276,12 @@ def rap_gsm8k(base_model: LanguageModel,
                             pickle.dump(algo_output, f)
                 except Exception as e:
                     print(f"Error in case {resume + i + 1}: {e}")
-                    error_cases.append([resume + i + 1, e])
+                    # Store the formatted traceback, not the exception object.
+                    # error_cases is pickled below, and several exceptions raised
+                    # here (notably torch.cuda.OutOfMemoryError) are not
+                    # picklable, so storing `e` makes the error handler itself
+                    # crash and takes down the whole run.
+                    error_cases.append([resume + i + 1, repr(e), traceback.format_exc()])
                     print(error_cases)
     
             # save list of error cases as a single pickle file
@@ -251,14 +290,17 @@ def rap_gsm8k(base_model: LanguageModel,
         else:
             try:
                 reasoner = Reasoner(world_model=world_model, search_config=config, search_algo=search_algo)
-                seed_num = 12306
+                seed_num = seed + resume + i
                 random.seed(seed_num)
                 np.random.seed(seed_num)
                 torch.manual_seed(seed_num)
                 torch.cuda.manual_seed(seed_num)
                 torch.backends.cudnn.deterministic = True
-                algo_output, num_inf_for_get_actions, num_inf_for_answer, num_inf_for_fast_reward = reasoner(input_processor(example),
+                algo_output, llm_usage_stats = reasoner(input_processor(example),
                                             prompt=ret)
+                num_inf_for_get_actions = llm_usage_stats['num_inf_for_get_actions']
+                num_inf_for_answer = llm_usage_stats['num_inf_for_answer']
+                num_inf_for_fast_reward = llm_usage_stats['num_inf_for_fast_reward']
                 total_num_inf = num_inf_for_get_actions + num_inf_for_answer + num_inf_for_fast_reward
                 output = utils.retrieve_answer(algo_output)
                 answer = utils.retrieve_answer_from_dataset(example)
@@ -280,7 +322,7 @@ def rap_gsm8k(base_model: LanguageModel,
                         pickle.dump(algo_output, f)
             except Exception as e:
                 print(f"Error in case {resume + i + 1}: {e}")
-                error_cases.append([resume + i + 1, e])
+                error_cases.append([resume + i + 1, repr(e), traceback.format_exc()])
                 print(error_cases)
 
         # save list of error cases as a single pickle file

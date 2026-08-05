@@ -71,45 +71,54 @@ def cot_sc_extractor(algo_output, sc=True):
         return None
     return answers_set, answers, counter.most_common(1)[0][0]
 
-def eval_output(answer, output):
-        if output is None:
-            return False
-        try:
-            output = int(output)
-            answer = int(answer)
-            return output == answer
-        except ValueError:
-            pass
-        try:
-            output = float(output)
-            answer = float(answer)
-            return output == answer
-        except ValueError:
-            pass
-        return output == answer
+def _normalize_answer(value):
+    """Coerce an extracted answer into a plain, comparable scalar.
 
-def eval_output_tup(answer, output):
-        if output is None:
-            return False
-        try:
-            if isinstance(output, tuple):
-                output = int(output[0])
-            else:
-                output = int(output)
-            answer = int(answer)
-            return output == answer
-        except ValueError:
-            pass
-        try:
-            if isinstance(output, tuple):
-                output = float(output[0])
-            else:
-                output = float(output)
-            answer = float(answer)
-            return output == answer
-        except ValueError:
-            pass
-        return output == answer
+    Handles the two shapes an answer can arrive in: a bare string (from
+    retrieve_answer / cot_sc_extractor) or a ``(answer, count)`` tuple, which is
+    what MCTSAggregation_SE puts in ``AlgorithmOutput.aggregated_result``. Also
+    strips thousands separators and currency symbols, which survive some
+    extraction paths and otherwise make "1,200" compare unequal to "1200".
+    """
+    if isinstance(value, (tuple, list)):
+        if not value:
+            return None
+        value = value[0]
+    if value is None:
+        return None
+    if isinstance(value, str):
+        value = value.replace(',', '').replace('$', '').strip()
+        value = value.rstrip('.')
+    return value
+
+
+def eval_output(answer, output):
+    """Compare an extracted answer against the gold answer.
+
+    This previously existed in two near-identical variants -- eval_output and
+    eval_output_tup -- and which one ran depended on whether the adaptive gate
+    routed the example to CoT or to MCTS. Only the _tup variant unwrapped
+    aggregator tuples, so the same prediction could be scored differently
+    depending on the branch. They are now a single implementation.
+    """
+    output = _normalize_answer(output)
+    answer = _normalize_answer(answer)
+    if output is None:
+        return False
+    try:
+        return int(output) == int(answer)
+    except (ValueError, TypeError):
+        pass
+    try:
+        return float(output) == float(answer)
+    except (ValueError, TypeError):
+        pass
+    return output == answer
+
+
+# Retained as an alias so existing call sites keep working; the tuple handling
+# now lives in _normalize_answer and applies to both branches.
+eval_output_tup = eval_output
     
 def compute_entropy(counts, base=2):
     """
