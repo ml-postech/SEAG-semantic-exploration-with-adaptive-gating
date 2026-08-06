@@ -8,7 +8,7 @@ To run the GSM8K experiment using our implementation:
 
 ```bash
 TIKTOKEN_CACHE_DIR="" CUDA_VISIBLE_DEVICES=0 torchrun --nproc-per-node 1 --master-port 1111 \
-expample_gsm8k/inference.py \
+example_gsm8k/inference.py \
 --base_lm llama-3 --llama_3_ckpts <path_to_llama3_ckpt> --llama_size "8B-Instruct" \
 --n_iters 10 --early_term_threshold 11 \
 --log_dir ./logs/gsm8k/

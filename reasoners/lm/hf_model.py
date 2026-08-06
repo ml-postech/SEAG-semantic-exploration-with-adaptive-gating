@@ -101,10 +101,22 @@ class HFModel(LanguageModel):
         self.device = device
         # self.model = BetterTransformer.transform(self.model) #not updated yet
         self.model.eval()
-        # for old llama tokenizer's config, below is necessary
-        self.model.config.pad_token_id = self.tokenizer.pad_token_id = 0  # unk
-        self.model.config.bos_token_id = 1
-        self.model.config.eos_token_id = 2
+        # Derive the special tokens from the tokenizer instead of hardcoding
+        # LLaMA-2's ids. Forcing eos_token_id = 2 onto a LLaMA-3 checkpoint means
+        # its real end-of-turn token (<|eot_id|>, id 128009) is never treated as
+        # a stop token, so generation runs to max_new_tokens, degenerates into
+        # repetition, and poisons the MCTS context with hallucinated few-shot
+        # examples. The old unk-as-pad fallback is preserved for the old llama
+        # tokenizers that need it.
+        if self.tokenizer.pad_token_id is None:
+            self.tokenizer.pad_token_id = (self.tokenizer.unk_token_id
+                                           if self.tokenizer.unk_token_id is not None
+                                           else self.tokenizer.eos_token_id)
+        self.model.config.pad_token_id = self.tokenizer.pad_token_id
+        if self.tokenizer.bos_token_id is not None:
+            self.model.config.bos_token_id = self.tokenizer.bos_token_id
+        if self.tokenizer.eos_token_id is not None:
+            self.model.config.eos_token_id = self.tokenizer.eos_token_id
         # if torch.__version__ >= "2" and sys.platform != "win32":#need to figure out this line
         #     self.model = torch.compile(self.model) ###make the faketensor bug, an on-going issue in pytorch
     def generate(
@@ -151,6 +163,14 @@ class HFModel(LanguageModel):
                 else:
                     warnings.warn(f'the eos_token {repr(token)} is neither str nor int, which is ignored')
         eos_token_id.append(self.tokenizer.eos_token_id)
+        # Instruction-tuned LLaMA-3 ends a turn with <|eot_id|> rather than the
+        # tokenizer's nominal eos_token, so it has to be an explicit stop token
+        # or generation never terminates on its own.
+        eot_id = self.tokenizer.convert_tokens_to_ids('<|eot_id|>')
+        if (eot_id is not None
+                and eot_id != self.tokenizer.unk_token_id
+                and eot_id not in eos_token_id):
+            eos_token_id.append(eot_id)
         generation_config = GenerationConfig(
             max_length=max_length,
             temperature=temperature,
